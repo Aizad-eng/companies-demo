@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from urllib.parse import urlparse
 
 import requests
@@ -78,6 +79,16 @@ ENV_KEYS = {
     "findymail-api-token": "FINDYMAIL_API_KEY",
     "firecrawl-api-token": "FIRECRAWL_API_KEY",
 }
+
+# Mobile-finder pipeline: we push a person (with LinkedIn URL) to this
+# webhook (n8n -> Clay); Clay finds the mobile and writes the result into
+# Supabase, which we poll.
+CLAY_WEBHOOK_URL = os.environ.get(
+    "CLAY_WEBHOOK_URL",
+    "https://n8n-new-pbp2.onrender.com/webhook/21d2396f-3872-4550-ba03-383df1e56ada")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+MOBILE_TABLE = "mobile_results"
 
 
 def keychain(service):
@@ -613,6 +624,66 @@ def api_linkedin():
     return jsonify({"url": url.rstrip("/"),
                     "confidence": (parsed.get("confidence") or "").strip(),
                     "evidence": (parsed.get("evidence") or "").strip()})
+
+
+def supabase_headers():
+    return {"apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json"}
+
+
+@app.post("/api/mobile")
+def api_mobile():
+    """Kick off a mobile lookup: requires a LinkedIn profile (Clay needs it),
+    pushes to the Clay webhook, returns a request_id the client polls."""
+    body = request.get_json(silent=True) or {}
+    linkedin = (body.get("linkedin") or "").strip()
+    person = (body.get("person") or "").strip()
+    if not linkedin:
+        return jsonify({"error": "A LinkedIn profile is required first."}), 400
+    if not person:
+        return jsonify({"error": "Missing person name."}), 400
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return jsonify({"error": "Supabase is not configured "
+                                 "(SUPABASE_URL / SUPABASE_SERVICE_KEY)."}), 500
+    request_id = uuid.uuid4().hex
+    payload = {
+        "request_id": request_id,
+        "name": person,
+        "title": body.get("title") or "",
+        "linkedin_url": linkedin,
+        "company": body.get("company") or "",
+        "domain": body.get("domain") or "",
+    }
+    try:
+        r = requests.post(CLAY_WEBHOOK_URL, json=payload, timeout=30)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        return jsonify({"error": f"Webhook push failed: {e}"}), 502
+    return jsonify({"request_id": request_id})
+
+
+@app.get("/api/mobile/<request_id>")
+def api_mobile_result(request_id):
+    """Poll Supabase for the Clay result for one request."""
+    if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+        return jsonify({"error": "Bad request id."}), 400
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/{MOBILE_TABLE}",
+            params={"request_id": f"eq.{request_id}",
+                    "select": "mobile,status,name,linkedin_url",
+                    "limit": "1"},
+            headers=supabase_headers(), timeout=30)
+        r.raise_for_status()
+        rows = r.json()
+    except requests.RequestException as e:
+        return jsonify({"error": f"Supabase query failed: {e}"}), 502
+    if not rows:
+        return jsonify({"status": "pending"})
+    row = rows[0]
+    return jsonify({"status": row.get("status") or ("found" if row.get("mobile") else "not_found"),
+                    "mobile": row.get("mobile") or ""})
 
 
 @app.post("/api/email")

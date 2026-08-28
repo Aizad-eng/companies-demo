@@ -82,6 +82,8 @@
   .lead button.email { padding: 2px 8px; font-size: 11px; }
   .lead .li-slot { display: block; margin: 1px 0 2px; }
   .lead button.li { padding: 2px 8px; font-size: 11px; font-style: normal; }
+  .lead .mob-slot { display: block; margin: 1px 0 2px; }
+  .lead button.mob { padding: 2px 8px; font-size: 11px; }
   .lead a.found { font-weight: 600; }
   td.acq { min-width: 110px; font-size: 13px; }
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
@@ -265,6 +267,12 @@ $('rows').addEventListener('click', e => {
     findLinkedIn(Number(li.dataset.i), Number(li.dataset.j), li);
     return;
   }
+  const mob = e.target.closest('button.mob');
+  if (mob) {
+    mob.disabled = true;
+    findMobile(Number(mob.dataset.i), Number(mob.dataset.j), mob);
+    return;
+  }
   const acq = e.target.closest('button.acq-check');
   if (acq) {
     acq.disabled = true;
@@ -376,7 +384,8 @@ async function findLinkedIn(i, j, btn) {
         .join('; ');
       slot.innerHTML = `<a class="found" href="${esc(data.url)}" target="_blank" rel="noopener"
         title="${esc(data.evidence)}">in ${esc(data.url.split('/in/')[1] || 'profile')}</a>${
-        data.confidence === 'medium' ? ' <span class="none">(unverified)</span>' : ''}`;
+        data.confidence === 'medium' ? ' <span class="none">(unverified)</span>' : ''}
+        <span class="mob-slot"><button class="mini mob" data-i="${i}" data-j="${j}">📱 Find mobile</button></span>`;
     } else {
       slot.innerHTML = '<span class="none" title="' + esc(data.evidence || '') + '">no confident match</span>';
     }
@@ -385,6 +394,61 @@ async function findLinkedIn(i, j, btn) {
     slot.querySelector('.err').onclick = () => {
       slot.innerHTML = '';
       findLinkedIn(i, j, btn);
+    };
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function findMobile(i, j, btn) {
+  const r = current[i];
+  const person = r._people[j];
+  const slot = btn.closest('.mob-slot');
+  slot.innerHTML = '<span class="dash">Sent to enrichment…</span>';
+  try {
+    const res = await fetch('/api/mobile', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({person: person.name, title: person.title,
+                            linkedin: person.linkedin, company: r.name,
+                            domain: r.domain})
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
+    if (!res.ok) throw new Error(data.error || 'Mobile lookup failed');
+
+    // Clay needs a moment: first poll after 10s, then every 5s, ~2 min cap
+    await sleep(10000);
+    for (let attempt = 0; attempt < 23; attempt++) {
+      const pr = await fetch('/api/mobile/' + data.request_id);
+      const pd = await pr.json();
+      if (pd.status === 'found' && pd.mobile) {
+        person.mobile = pd.mobile;
+        r.leadership = r._people
+          .map(p => `${p.name} (${p.title})`
+            + (p.email ? ` <${p.email}>` : '')
+            + (p.mobile ? ` ${p.mobile}` : '')
+            + (p.linkedin ? ` ${p.linkedin}` : '')
+            + (p.source ? ` [${p.source}]` : ''))
+          .join('; ');
+        slot.innerHTML = `<a class="found" href="tel:${esc(pd.mobile)}">📱 ${esc(pd.mobile)}</a>`;
+        return;
+      }
+      if (pd.status === 'not_found') {
+        slot.innerHTML = '<span class="none">no mobile found</span>';
+        return;
+      }
+      slot.innerHTML = `<span class="dash">Waiting for result… ${10 + attempt * 5}s</span>`;
+      await sleep(5000);
+    }
+    throw new Error('Timed out waiting for result');
+  } catch (err) {
+    slot.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
+    slot.querySelector('.err').onclick = () => {
+      slot.innerHTML = '';
+      findMobile(i, j, btn);
     };
   }
 }
