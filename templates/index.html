@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hitech Advisors · Maps Scraper</title>
+<title>Hitech Advisors · Lead Gen Engine</title>
 <style>
   :root {
     --bg: #f7f7f8; --card: #fff; --ink: #17181c; --muted: #6b7280;
@@ -31,6 +31,11 @@
   }
   .brand .divider { width: 1px; height: 36px; background: var(--line); }
   h1 { font-size: 19px; margin: 0; letter-spacing: .01em; }
+  h1 .demo {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 2px 6px; vertical-align: 2px; margin-left: 6px;
+  }
   .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
   form {
     display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
@@ -45,6 +50,7 @@
     border: 1px solid var(--line); background: var(--bg); color: var(--ink);
   }
   input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input:disabled { opacity: .45; cursor: not-allowed; }
   button {
     font: inherit; font-weight: 600; padding: 9px 18px; border: 0;
     border-radius: 7px; background: var(--accent); color: var(--accent-ink);
@@ -90,8 +96,8 @@
     <img src="{{ url_for('static', filename='hitech-logo.png') }}" alt="Hitech Advisors">
     <div class="divider"></div>
     <div>
-      <h1>Maps Scraper</h1>
-      <p class="sub">Google Maps results via Serper &middot; max {{ page_size }} per search</p>
+      <h1>Lead Gen Engine <span class="demo">Demo</span></h1>
+      <p class="sub">Find local businesses and the people behind them</p>
     </div>
   </header>
 
@@ -106,7 +112,7 @@
     </div>
     <div class="field">
       <label for="n">Results</label>
-      <input id="n" type="number" min="1" max="{{ page_size }}" value="{{ page_size }}" style="width:90px">
+      <input id="n" type="number" value="{{ page_size }}" style="width:90px" disabled title="Fixed at {{ page_size }} for now">
     </div>
     <button id="go" type="submit">Search</button>
   </form>
@@ -174,10 +180,10 @@ $('f').addEventListener('submit', async e => {
       ? ` · ${data.filtered} filtered out`
       : '';
     $('status').textContent = current.length
-      ? `${current.length} result${current.length === 1 ? '' : 's'} for “${data.query}”${note} · ${data.credits} credits used`
+      ? `${current.length} result${current.length === 1 ? '' : 's'} for “${data.query}”${note}`
       : `No results for “${data.query}”${note}.`;
     $('status').title = data.filtered
-      ? 'Blocked by blocklist.txt:\n' + data.filteredDomains.join('\n')
+      ? 'Excluded (directories & manufacturers):\n' + data.filteredDomains.join('\n')
       : '';
   } catch (err) {
     $('status').className = 'status err';

@@ -50,6 +50,9 @@ HARDCODED_BLOCKLIST = frozenset({
 })
 
 app = Flask(__name__)
+# Templates change rarely in prod and constantly in dev; always re-check mtime
+# so edits show up without a server restart regardless of how we were launched.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 
 # Keychain service name -> env var used on hosted deploys (Render etc.)
