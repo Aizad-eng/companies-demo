@@ -72,6 +72,9 @@
   .lead .person { display: block; }
   .lead .title { color: var(--muted); }
   .lead .src { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
+  .lead .email-slot { display: block; margin: 1px 0 2px; }
+  .lead button.email { padding: 2px 8px; font-size: 11px; }
+  .lead a.found { font-weight: 600; }
   .lead .src a { color: var(--muted); }
   .lead .none { color: var(--muted); font-style: italic; }
   .lead .err { color: #dc2626; cursor: pointer; text-decoration: underline dotted; }
@@ -212,10 +215,13 @@ async function checkRow(i, cellEl) {
       return `<span class="src">${t}</span>`;
     };
     cellEl.innerHTML = data.people.length
-      ? data.people.map(p =>
-          `<span class="person">${esc(p.name)} <span class="title">· ${esc(p.title)}</span>${srcHtml(p)}</span>`
+      ? data.people.map((p, j) =>
+          `<span class="person">${esc(p.name)} <span class="title">· ${esc(p.title)}</span>
+           <span class="email-slot">${r.domain ? `<button class="mini email" data-i="${i}" data-j="${j}">✉ Find email</button>` : ''}</span>
+           ${srcHtml(p)}</span>`
         ).join('')
       : '<span class="none">no one found</span>';
+    r._people = data.people;
     if (data.source) cellEl.title = data.source;
   } catch (err) {
     cellEl.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
@@ -224,11 +230,52 @@ async function checkRow(i, cellEl) {
 }
 
 $('rows').addEventListener('click', e => {
-  const btn = e.target.closest('button.check');
-  if (!btn) return;
-  btn.disabled = true;
-  checkRow(Number(btn.dataset.i), btn.closest('td'));
+  const check = e.target.closest('button.check');
+  if (check) {
+    check.disabled = true;
+    checkRow(Number(check.dataset.i), check.closest('td'));
+    return;
+  }
+  const em = e.target.closest('button.email');
+  if (em) {
+    em.disabled = true;
+    findEmail(Number(em.dataset.i), Number(em.dataset.j), em);
+  }
 });
+
+async function findEmail(i, j, btn) {
+  const r = current[i];
+  const person = r._people[j];
+  const slot = btn.closest('.email-slot');
+  slot.innerHTML = '<span class="dash">Searching…</span>';
+  try {
+    const res = await fetch('/api/email', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({person: person.name, domain: r.domain})
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
+    if (!res.ok) throw new Error(data.error || 'Email lookup failed');
+    if (data.email) {
+      person.email = data.email;
+      r.leadership = r._people
+        .map(p => `${p.name} (${p.title})` + (p.email ? ` <${p.email}>` : '') + (p.source ? ` [${p.source}]` : ''))
+        .join('; ');
+      slot.innerHTML = `<a class="found" href="mailto:${esc(data.email)}">${esc(data.email)}</a>`;
+    } else {
+      slot.innerHTML = '<span class="none">no email found</span>';
+    }
+  } catch (err) {
+    slot.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
+    slot.querySelector('.err').onclick = () => {
+      slot.innerHTML = '';
+      findEmail(i, j, btn);
+    };
+  }
+}
 
 $('csv').addEventListener('click', async () => {
   const res = await fetch('/api/export', {

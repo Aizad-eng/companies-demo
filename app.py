@@ -72,6 +72,7 @@ load_dotenv()
 ENV_KEYS = {
     "serper-api-token": "SERPER_API_KEY",
     "perplexity-api-token": "PERPLEXITY_API_KEY",
+    "findymail-api-token": "FINDYMAIL_API_KEY",
 }
 
 
@@ -344,6 +345,40 @@ def api_leadership():
         return jsonify({"error": "Could not parse model reply.",
                         "raw": reply[:300]}), 502
     return jsonify({"people": people, "source": parsed.get("source", "")})
+
+
+@app.post("/api/email")
+def api_email():
+    """Find a work email for one person via Findymail. Manual, per click —
+    Findymail charges 1 credit per email found, so nothing here is automatic."""
+    body = request.get_json(silent=True) or {}
+    person = (body.get("person") or "").strip()
+    domain = (body.get("domain") or "").strip()
+    if not person or not domain:
+        return jsonify({"error": "Need both a person name and a domain."}), 400
+    try:
+        key = keychain("findymail-api-token")
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    try:
+        r = requests.post(
+            "https://app.findymail.com/api/search/name",
+            json={"name": person, "domain": domain},
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            timeout=60,
+        )
+        if r.status_code == 402:
+            return jsonify({"error": "Findymail: out of credits."}), 502
+        r.raise_for_status()
+        contact = r.json().get("contact") or {}
+    except requests.HTTPError as e:
+        return jsonify({"error": f"Findymail {e.response.status_code}: "
+                                 f"{e.response.text[:150]}"}), 502
+    except requests.RequestException as e:
+        return jsonify({"error": f"Findymail request failed: {e}"}), 502
+    return jsonify({"email": contact.get("email") or "",
+                    "verified": bool(contact.get("verified", True))})
 
 
 if __name__ == "__main__":
