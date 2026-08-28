@@ -62,24 +62,14 @@
   .status { font-size: 13px; color: var(--muted); margin-bottom: 12px; min-height: 20px; }
   .status.err { color: #dc2626; }
   .tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px;
-    table-layout: fixed; min-width: 960px; }
-  col.c-name { width: 12%; } col.c-domain { width: 12.5%; }
-  col.c-rev { width: 6%; } col.c-state { width: 4.5%; }
-  col.c-cat { width: 10%; } col.c-addr { width: 14%; }
-  col.c-lead { width: 27%; } col.c-acq { width: 14%; }
-  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line);
-    vertical-align: top; overflow-wrap: anywhere; }
-  td > a {
-    display: inline-block; max-width: 100%; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
-  }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   tr:last-child td { border-bottom: 0; }
-  td.name { font-weight: 500; }
+  td.name { min-width: 140px; font-weight: 500; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.addr { color: var(--muted); font-size: 13px; }
-  td.lead { font-size: 14px; }
+  td.addr { min-width: 150px; color: var(--muted); font-size: 13px; }
+  td.lead { min-width: 240px; font-size: 14px; }
   button.mini {
     padding: 4px 12px; font-size: 12px; font-weight: 600;
     background: transparent; color: var(--accent);
@@ -91,14 +81,14 @@
   .lead .pname { font-weight: 600; font-size: 15px; }
   .lead .actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .val {
-    display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+    display: inline-flex; align-items: center; gap: 5px;
     background: var(--bg); border: 1px solid var(--line);
     border-radius: 7px; padding: 4px 11px; font-size: 13.5px;
   }
   .val a {
     color: var(--ink); text-decoration: none; white-space: nowrap;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
-    display: inline-block; min-width: 0;
+    max-width: 300px; overflow: hidden; text-overflow: ellipsis;
+    display: inline-block;
   }
   .val a:hover { color: var(--accent); }
   .lead .title { color: var(--muted); }
@@ -117,7 +107,7 @@
   }
   button.copy:hover { color: var(--accent); border-color: var(--accent); }
   button.copy.done { color: #16a34a; border-color: #16a34a; }
-  td.acq { font-size: 13.5px; }
+  td.acq { min-width: 150px; font-size: 13.5px; }
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
   .acq .acq-by { display: block; }
   .acq .independent { color: #16a34a; font-weight: 600; display: block; }
@@ -129,7 +119,9 @@
   .lead .err { color: #dc2626; cursor: pointer; text-decoration: underline dotted; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  td > a { color: var(--ink); border-bottom: 1px solid var(--line); }
+  td > a {
+    color: var(--ink); border-bottom: 1px solid var(--line);
+  }
   td > a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
   tbody tr:hover td { background: rgba(128, 138, 170, .05); }
   .dash { color: var(--muted); }
@@ -220,10 +212,6 @@
   </div>
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
-      <colgroup>
-        <col class="c-name"><col class="c-domain"><col class="c-rev"><col class="c-state">
-        <col class="c-cat"><col class="c-addr"><col class="c-lead"><col class="c-acq">
-      </colgroup>
       <thead><tr>
         <th>Name</th><th>Domain</th>
         <th style="text-align:right">Reviews</th><th>State</th><th>Category</th><th>Address</th><th>Leadership</th><th>Acquired?</th>
