@@ -281,7 +281,7 @@ async function checkAcquisition(i, cellEl) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name: r.name, domain: r.domain,
                             website: r.website, address: r.address,
-                            category: r.category})
+                            phone: r.phone, category: r.category})
     });
     const text = await res.text();
     let data;

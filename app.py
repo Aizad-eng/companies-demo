@@ -357,6 +357,7 @@ Business name: {name}
 Domain: {domain}
 Website: {website}
 Address: {address}
+Phone: {phone}
 Category: {category}
 
 IMPORTANT — direction matters. I only care whether THIS company was bought,
@@ -401,6 +402,27 @@ def company_name_variants(name, domain):
     if domain:
         variants.add(normalize_text(domain.split(".")[0]))
     return {v for v in variants if len(v) >= 5}
+
+
+def identify_company_in_page(page, name, domain, address, phone):
+    """Return how the page identifies this company, or '' if it doesn't.
+    Domain / phone / street address are strong anchors; a name match alone
+    is weaker (generic names collide with descriptive text)."""
+    norm_page = normalize_text(page)
+    raw_page = page.lower()
+    if domain and domain.lower() in raw_page:
+        return "domain"
+    if phone:
+        digits = re.sub(r"\D", "", phone)[-10:]
+        if len(digits) == 10 and digits in re.sub(r"\D", "", page):
+            return "phone number"
+    if address:
+        street = normalize_text(address.split(",")[0])
+        if len(street) >= 8 and street in norm_page:
+            return "street address"
+    if any(v in norm_page for v in company_name_variants(name, domain)):
+        return "company name"
+    return ""
 
 
 def fetch_page_text(url):
@@ -461,6 +483,7 @@ def api_acquisition():
         domain=body.get("domain") or "unknown",
         website=body.get("website") or "unknown",
         address=body.get("address") or "unknown",
+        phone=body.get("phone") or "unknown",
         category=body.get("category") or "unknown",
     )
     try:
@@ -494,14 +517,20 @@ def api_acquisition():
             if not page:
                 verification = "Could not fetch the cited source to verify."
             else:
-                norm_page = normalize_text(page)
-                if any(v in norm_page for v in
-                       company_name_variants(name, body.get("domain") or "")):
+                matched = identify_company_in_page(
+                    page, name,
+                    body.get("domain") or "",
+                    body.get("address") or "",
+                    body.get("phone") or "")
+                if matched:
                     status = "acquired"
-                    verification = "Source page fetched and it names this company."
+                    verification = (f"Source page fetched; identified this "
+                                    f"company by {matched}.")
                 else:
-                    verification = ("Cited source does not name this company — "
-                                    "likely an anonymous/unrelated announcement.")
+                    verification = ("Cited source does not identify this "
+                                    "company (no name, domain, address, or "
+                                    "phone match) — likely an anonymous or "
+                                    "unrelated announcement.")
 
     return jsonify({
         "status": status,
