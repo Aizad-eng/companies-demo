@@ -68,7 +68,7 @@
   td.name { min-width: 140px; font-weight: 500; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.addr { min-width: 150px; color: var(--muted); font-size: 13px; }
-  td.lead { min-width: 120px; font-size: 13px; }
+  td.lead { min-width: 240px; font-size: 14px; }
   button.mini {
     padding: 4px 12px; font-size: 12px; font-weight: 600;
     background: transparent; color: var(--accent);
@@ -77,36 +77,36 @@
   button.mini:disabled { opacity: .55; }
   .lead .person { display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
   .lead .person + .person { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; }
-  .lead .pname { font-weight: 600; }
+  .lead .pname { font-weight: 600; font-size: 15px; }
   .lead .actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .val {
-    display: inline-flex; align-items: center; gap: 3px;
+    display: inline-flex; align-items: center; gap: 5px;
     background: var(--bg); border: 1px solid var(--line);
-    border-radius: 6px; padding: 2px 8px; font-size: 12px;
+    border-radius: 7px; padding: 4px 11px; font-size: 13.5px;
   }
   .val a {
     color: var(--ink); text-decoration: none; white-space: nowrap;
-    max-width: 185px; overflow: hidden; text-overflow: ellipsis;
+    max-width: 300px; overflow: hidden; text-overflow: ellipsis;
     display: inline-block;
   }
   .val a:hover { color: var(--accent); }
   .lead .title { color: var(--muted); }
   .lead .src { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
   .lead .email-slot { display: inline-flex; }
-  .lead button.email { padding: 2px 8px; font-size: 11px; }
+  .lead button.email { padding: 4px 11px; font-size: 12.5px; }
   .lead .li-slot { display: inline-flex; }
-  .lead button.li { padding: 2px 8px; font-size: 11px; font-style: normal; }
+  .lead button.li { padding: 4px 11px; font-size: 12.5px; font-style: normal; }
   .lead .mob-slot { display: inline-flex; }
-  .lead button.mob { padding: 2px 8px; font-size: 11px; }
+  .lead button.mob { padding: 4px 11px; font-size: 12.5px; }
   .lead a.found { font-weight: 600; }
   button.copy {
-    padding: 0 5px; margin-left: 5px; font-size: 12px; line-height: 1.5;
+    padding: 1px 7px; margin-left: 5px; font-size: 13px; line-height: 1.6;
     background: transparent; color: var(--muted);
     border: 1px solid var(--line); border-radius: 5px; vertical-align: 1px;
   }
   button.copy:hover { color: var(--accent); border-color: var(--accent); }
   button.copy.done { color: #16a34a; border-color: #16a34a; }
-  td.acq { min-width: 110px; font-size: 13px; }
+  td.acq { min-width: 150px; font-size: 13.5px; }
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
   .acq .acq-by { display: block; }
   .acq .independent { color: #16a34a; font-weight: 600; display: block; }
@@ -345,24 +345,24 @@ async function checkAcquisition(i, cellEl) {
     catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
     if (!res.ok) throw new Error(data.error || 'Acquisition check failed');
 
-    const srcBit = data.source
-      ? (/^https?:\/\//.test(data.source)
-          ? `<span class="src"><a href="${esc(data.source)}" target="_blank" rel="noopener">${esc(data.source.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></span>`
-          : `<span class="src">${esc(data.source)}</span>`)
+    const srcLink = data.source_url
+      ? `<span class="src"><a href="${esc(data.source_url)}" target="_blank" rel="noopener"
+           title="${esc(data.source_url)}">source: ${esc(data.source_url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])} ↗</a>${copyBtn(data.source_url)}</span>`
       : '';
     if (data.status === 'acquired') {
-      r.acquired = `Acquired by ${data.acquirer}` + (data.when ? ` (${data.when})` : '');
+      r.acquired = `Acquired by ${data.acquirer}` + (data.when ? ` (${data.when})` : '') + (data.source_url ? ` — ${data.source_url}` : '');
       cellEl.innerHTML = `<span class="acquired">● Acquired</span>
-        <span class="acq-by">${esc(data.acquirer)}${data.when ? ' · ' + esc(data.when) : ''}</span>${srcBit}`;
+        <span class="acq-by">${esc(data.acquirer)}${data.when ? ' · ' + esc(data.when) : ''}</span>${srcLink}`;
       cellEl.title = [data.quote, data.detail, data.verification].filter(Boolean).join('\n');
     } else if (data.status === 'unconfirmed') {
-      r.acquired = `Unconfirmed claim (${data.acquirer || 'unknown buyer'})`;
+      r.acquired = `Unconfirmed claim (${data.acquirer || 'unknown buyer'})` + (data.source_url ? ` — ${data.source_url}` : '');
       cellEl.innerHTML = `<span class="unconfirmed">● Unconfirmed</span>
-        <span class="acq-by">claim: ${esc(data.acquirer || '?')} — needs manual review</span>${srcBit}`;
+        <span class="acq-by">claim: ${esc(data.acquirer || '?')} — needs manual review</span>${srcLink}`;
       cellEl.title = data.verification || '';
     } else {
       r.acquired = 'Independent';
-      cellEl.innerHTML = `<span class="independent">● Independent</span>${srcBit}`;
+      cellEl.innerHTML = `<span class="independent">● Independent</span>`;
+      cellEl.title = data.verification || data.source || '';
     }
   } catch (err) {
     cellEl.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;

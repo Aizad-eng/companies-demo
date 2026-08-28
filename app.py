@@ -516,6 +516,7 @@ def api_acquisition():
     status = "independent"
     verification = ""
 
+    source_url = ""
     if acquired:
         # Trust nothing: fetch the cited page ourselves and require it to
         # explicitly name this company. Anonymous releases stay unconfirmed.
@@ -524,7 +525,8 @@ def api_acquisition():
         if not m:
             verification = "No source URL was provided for the claim."
         else:
-            page = fetch_page_text(m.group(0).rstrip(").,;"))
+            source_url = m.group(0).rstrip(").,;")
+            page = fetch_page_text(source_url)
             if not page:
                 verification = "Could not fetch the cited source to verify."
             else:
@@ -551,6 +553,7 @@ def api_acquisition():
         "detail": (parsed.get("detail") or "").strip(),
         "quote": (parsed.get("quote") or "").strip(),
         "source": source,
+        "source_url": source_url,
         "verification": verification,
     })
 
