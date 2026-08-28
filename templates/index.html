@@ -80,6 +80,8 @@
   .lead .src { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
   .lead .email-slot { display: block; margin: 1px 0 2px; }
   .lead button.email { padding: 2px 8px; font-size: 11px; }
+  .lead .li-slot { display: block; margin: 1px 0 2px; }
+  .lead button.li { padding: 2px 8px; font-size: 11px; font-style: normal; }
   .lead a.found { font-weight: 600; }
   td.acq { min-width: 110px; font-size: 13px; }
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
@@ -231,6 +233,7 @@ async function checkRow(i, cellEl) {
       ? data.people.map((p, j) =>
           `<span class="person">${esc(p.name)} <span class="title">· ${esc(p.title)}</span>
            <span class="email-slot">${r.domain ? `<button class="mini email" data-i="${i}" data-j="${j}">✉ Find email</button>` : ''}</span>
+           <span class="li-slot"><button class="mini li" data-i="${i}" data-j="${j}">in LinkedIn</button></span>
            ${srcHtml(p)}</span>`
         ).join('')
       : '<span class="none">no one found</span>';
@@ -253,6 +256,12 @@ $('rows').addEventListener('click', e => {
   if (em) {
     em.disabled = true;
     findEmail(Number(em.dataset.i), Number(em.dataset.j), em);
+    return;
+  }
+  const li = e.target.closest('button.li');
+  if (li) {
+    li.disabled = true;
+    findLinkedIn(Number(li.dataset.i), Number(li.dataset.j), li);
     return;
   }
   const acq = e.target.closest('button.acq-check');
@@ -329,6 +338,47 @@ async function findEmail(i, j, btn) {
     slot.querySelector('.err').onclick = () => {
       slot.innerHTML = '';
       findEmail(i, j, btn);
+    };
+  }
+}
+
+async function findLinkedIn(i, j, btn) {
+  const r = current[i];
+  const person = r._people[j];
+  const slot = btn.closest('.li-slot');
+  slot.innerHTML = '<span class="dash">Searching…</span>';
+  try {
+    const res = await fetch('/api/linkedin', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({person: person.name, title: person.title,
+                            company: r.name, domain: r.domain,
+                            address: r.address})
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
+    if (!res.ok) throw new Error(data.error || 'LinkedIn lookup failed');
+    if (data.url) {
+      person.linkedin = data.url;
+      r.leadership = r._people
+        .map(p => `${p.name} (${p.title})`
+          + (p.email ? ` <${p.email}>` : '')
+          + (p.linkedin ? ` ${p.linkedin}` : '')
+          + (p.source ? ` [${p.source}]` : ''))
+        .join('; ');
+      slot.innerHTML = `<a class="found" href="${esc(data.url)}" target="_blank" rel="noopener"
+        title="${esc(data.evidence)}">in ${esc(data.url.split('/in/')[1] || 'profile')}</a>${
+        data.confidence === 'medium' ? ' <span class="none">(unverified)</span>' : ''}`;
+    } else {
+      slot.innerHTML = '<span class="none" title="' + esc(data.evidence || '') + '">no confident match</span>';
+    }
+  } catch (err) {
+    slot.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
+    slot.querySelector('.err').onclick = () => {
+      slot.innerHTML = '';
+      findLinkedIn(i, j, btn);
     };
   }
 }

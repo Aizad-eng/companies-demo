@@ -433,6 +433,77 @@ def api_acquisition():
     })
 
 
+LINKEDIN_PROMPT = """Find the LinkedIn profile URL of this specific person:
+
+Person: {person}
+Their role: {title}
+Company: {company}
+Company domain: {domain}
+Company location: {address}
+
+Rules — accuracy is critical:
+1. The profile MUST belong to this exact person at THIS company (or clearly
+   this company's owner/leader). Verify the profile's company, role, or
+   location matches before answering. Many people share the same name.
+2. Return the canonical URL only, like https://www.linkedin.com/in/username
+   — no tracking parameters, no search-result URLs, no company pages.
+3. If you cannot find a profile you are CONFIDENT belongs to this person at
+   this company, return an empty url. An empty answer is always better than
+   a wrong profile. Never guess or construct a URL that you have not seen.
+4. NEVER substitute someone else: do not return a profile of a different
+   person at the same company, even its owner. If the named person has no
+   findable profile, the url must be empty.
+
+Respond with ONLY a JSON object, no prose, in exactly this shape:
+{{"url": "https://www.linkedin.com/in/... or empty string",
+  "confidence": "high or medium or empty",
+  "evidence": "one short sentence: what on the profile matched (company, title, location)"}}"""
+
+
+@app.post("/api/linkedin")
+def api_linkedin():
+    body = request.get_json(silent=True) or {}
+    person = (body.get("person") or "").strip()
+    company = (body.get("company") or "").strip()
+    if not person or not company:
+        return jsonify({"error": "Need a person and a company."}), 400
+    prompt = LINKEDIN_PROMPT.format(
+        person=person,
+        title=body.get("title") or "unknown",
+        company=company,
+        domain=body.get("domain") or "unknown",
+        address=body.get("address") or "unknown",
+    )
+    try:
+        reply = ask_perplexity(prompt)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except requests.HTTPError as e:
+        return jsonify({"error": f"Perplexity {e.response.status_code}: "
+                                 f"{e.response.text[:200]}"}), 502
+    except requests.RequestException as e:
+        return jsonify({"error": f"Perplexity request failed: {e}"}), 502
+    try:
+        parsed = extract_json(reply)
+    except (json.JSONDecodeError, AttributeError):
+        return jsonify({"error": "Could not parse model reply.",
+                        "raw": reply[:300]}), 502
+    url = (parsed.get("url") or "").strip()
+    # accept only real profile URLs; anything else counts as not found
+    if url and not re.match(r"^https://([a-z]{2,3}\.)?linkedin\.com/in/[^?\s]+$", url):
+        url = ""
+    # hard guard: the profile must plausibly be the requested person, not a
+    # substitute (the model sometimes falls back to the company's owner).
+    if url:
+        tokens = [t for t in re.split(r"[^a-z]+", person.lower()) if len(t) > 1]
+        slug = url.split("/in/", 1)[-1].lower()
+        if tokens and not any(t in slug for t in tokens):
+            url = ""
+    return jsonify({"url": url.rstrip("/"),
+                    "confidence": (parsed.get("confidence") or "").strip(),
+                    "evidence": (parsed.get("evidence") or "").strip()})
+
+
 @app.post("/api/email")
 def api_email():
     """Find a work email for one person via Findymail. Manual, per click —
