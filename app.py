@@ -227,7 +227,7 @@ def api_search():
 def api_export():
     rows = (request.get_json(silent=True) or {}).get("results", [])
     cols = ["name", "domain", "rating", "ratingCount", "state",
-            "category", "address", "phone", "website", "leadership"]
+            "category", "address", "phone", "website", "leadership", "acquired"]
     buf = io.StringIO()
     w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
     w.writeheader()
@@ -348,6 +348,89 @@ def api_leadership():
         return jsonify({"error": "Could not parse model reply.",
                         "raw": reply[:300]}), 502
     return jsonify({"people": people, "source": parsed.get("source", "")})
+
+
+ACQUISITION_PROMPT = """Determine whether this specific local business has been ACQUIRED BY another company:
+
+Business name: {name}
+Domain: {domain}
+Website: {website}
+Address: {address}
+Category: {category}
+
+IMPORTANT — direction matters. I only care whether THIS company was bought,
+acquired, merged into, or taken over by someone else (private equity, a
+platform/roll-up, a national brand, or any other buyer), i.e. a change in
+its ownership. I do NOT care about companies that THIS business acquired —
+its own acquisitions of others are irrelevant and must be ignored.
+
+Search news, press releases, PE/M&A announcements (e.g. PR Newswire,
+BusinessWire), the company's own site, and industry trade press. Make sure
+any match is THIS business at THIS domain/address, not a similarly named one.
+Never guess — if there is no evidence of it being acquired, say so.
+
+Respond with ONLY a JSON object, no prose, in exactly this shape:
+{{"acquired": true or false,
+  "acquirer": "Buyer Name or empty string",
+  "when": "year or date or empty string",
+  "detail": "one short sentence, empty if not acquired",
+  "source": "URL or short citation for the finding, or where you checked"}}"""
+
+
+def ask_perplexity(prompt):
+    """One sonar call with 429 backoff; returns the reply text."""
+    key = keychain("perplexity-api-token")
+    for attempt in range(4):
+        r = requests.post(
+            PPLX_URL,
+            json={"model": PPLX_MODEL,
+                  "messages": [{"role": "user", "content": prompt}]},
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            timeout=120,
+        )
+        if r.status_code == 429 and attempt < 3:
+            time.sleep(2 * (attempt + 1))
+            continue
+        break
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+@app.post("/api/acquisition")
+def api_acquisition():
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Missing company name."}), 400
+    prompt = ACQUISITION_PROMPT.format(
+        name=name,
+        domain=body.get("domain") or "unknown",
+        website=body.get("website") or "unknown",
+        address=body.get("address") or "unknown",
+        category=body.get("category") or "unknown",
+    )
+    try:
+        reply = ask_perplexity(prompt)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except requests.HTTPError as e:
+        return jsonify({"error": f"Perplexity {e.response.status_code}: "
+                                 f"{e.response.text[:200]}"}), 502
+    except requests.RequestException as e:
+        return jsonify({"error": f"Perplexity request failed: {e}"}), 502
+    try:
+        parsed = extract_json(reply)
+    except (json.JSONDecodeError, AttributeError):
+        return jsonify({"error": "Could not parse model reply.",
+                        "raw": reply[:300]}), 502
+    return jsonify({
+        "acquired": bool(parsed.get("acquired")),
+        "acquirer": (parsed.get("acquirer") or "").strip(),
+        "when": str(parsed.get("when") or "").strip(),
+        "detail": (parsed.get("detail") or "").strip(),
+        "source": (parsed.get("source") or "").strip(),
+    })
 
 
 @app.post("/api/email")

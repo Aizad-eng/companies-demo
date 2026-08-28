@@ -81,6 +81,12 @@
   .lead .email-slot { display: block; margin: 1px 0 2px; }
   .lead button.email { padding: 2px 8px; font-size: 11px; }
   .lead a.found { font-weight: 600; }
+  td.acq { min-width: 110px; font-size: 13px; }
+  .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
+  .acq .acq-by { display: block; }
+  .acq .independent { color: #16a34a; font-weight: 600; display: block; }
+  .acq .src { display: block; font-size: 11px; color: var(--muted); }
+  .acq .src a { color: var(--muted); }
   .lead .src a { color: var(--muted); }
   .lead .none { color: var(--muted); font-style: italic; }
   .lead .err { color: #dc2626; cursor: pointer; text-decoration: underline dotted; }
@@ -125,7 +131,7 @@
     <table>
       <thead><tr>
         <th>Name</th><th>Domain</th>
-        <th style="text-align:right">Reviews</th><th>State</th><th>Category</th><th>Address</th><th>Leadership</th>
+        <th style="text-align:right">Reviews</th><th>State</th><th>Category</th><th>Address</th><th>Leadership</th><th>Acquired?</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -172,6 +178,7 @@ $('f').addEventListener('submit', async e => {
       <td>${cell(r.category)}</td>
       <td class="addr">${cell(r.address)}</td>
       <td class="lead" data-i="${i}"><button class="mini check" data-i="${i}">Check</button></td>
+      <td class="acq"><button class="mini acq-check" data-i="${i}">Check</button></td>
     </tr>`).join('');
 
     $('tablewrap').hidden = current.length === 0;
@@ -246,8 +253,51 @@ $('rows').addEventListener('click', e => {
   if (em) {
     em.disabled = true;
     findEmail(Number(em.dataset.i), Number(em.dataset.j), em);
+    return;
+  }
+  const acq = e.target.closest('button.acq-check');
+  if (acq) {
+    acq.disabled = true;
+    checkAcquisition(Number(acq.dataset.i), acq.closest('td'));
   }
 });
+
+async function checkAcquisition(i, cellEl) {
+  const r = current[i];
+  cellEl.innerHTML = '<span class="dash">Searching…</span>';
+  try {
+    const res = await fetch('/api/acquisition', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: r.name, domain: r.domain,
+                            website: r.website, address: r.address,
+                            category: r.category})
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
+    if (!res.ok) throw new Error(data.error || 'Acquisition check failed');
+
+    const srcBit = data.source
+      ? (/^https?:\/\//.test(data.source)
+          ? `<span class="src"><a href="${esc(data.source)}" target="_blank" rel="noopener">${esc(data.source.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></span>`
+          : `<span class="src">${esc(data.source)}</span>`)
+      : '';
+    if (data.acquired) {
+      r.acquired = `Acquired by ${data.acquirer}` + (data.when ? ` (${data.when})` : '');
+      cellEl.innerHTML = `<span class="acquired">● Acquired</span>
+        <span class="acq-by">${esc(data.acquirer)}${data.when ? ' · ' + esc(data.when) : ''}</span>${srcBit}`;
+      if (data.detail) cellEl.title = data.detail;
+    } else {
+      r.acquired = 'Independent';
+      cellEl.innerHTML = `<span class="independent">● Independent</span>${srcBit}`;
+    }
+  } catch (err) {
+    cellEl.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
+    cellEl.querySelector('.err').onclick = () => checkAcquisition(i, cellEl);
+  }
+}
 
 async function findEmail(i, j, btn) {
   const r = current[i];
