@@ -52,14 +52,43 @@ HARDCODED_BLOCKLIST = frozenset({
 app = Flask(__name__)
 
 
+# Keychain service name -> env var used on hosted deploys (Render etc.)
+def load_dotenv():
+    """Load .env beside this file into os.environ (no override)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+    except FileNotFoundError:
+        pass
+
+
+load_dotenv()
+
+ENV_KEYS = {
+    "serper-api-token": "SERPER_API_KEY",
+    "perplexity-api-token": "PERPLEXITY_API_KEY",
+}
+
+
 def keychain(service):
+    """Env var first (Render/Linux), macOS Keychain as local fallback."""
+    env_name = ENV_KEYS.get(service, "")
+    val = os.environ.get(env_name, "").strip()
+    if val:
+        return val
     out = subprocess.run(
         ["security", "find-generic-password", "-s", service,
          "-a", "options2exit", "-w"],
         capture_output=True, text=True,
     )
     if out.returncode != 0:
-        raise RuntimeError(f"{service} not found in Keychain")
+        raise RuntimeError(f"Set the {env_name} env var "
+                           f"({service} not found in Keychain either)")
     return out.stdout.strip()
 
 
@@ -318,4 +347,6 @@ def api_leadership():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5055, debug=True)
+    port = int(os.environ.get("PORT", 5055))
+    app.run(host="0.0.0.0" if "PORT" in os.environ else "127.0.0.1",
+            port=port, debug="PORT" not in os.environ)

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: companies-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 180
+    envVars:
+      - key: SERPER_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
