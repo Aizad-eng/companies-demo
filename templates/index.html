@@ -47,13 +47,13 @@
   .status.err { color: #dc2626; }
   .tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   tr:last-child td { border-bottom: 0; }
-  td.name { white-space: normal; min-width: 180px; font-weight: 500; }
+  td.name { min-width: 140px; font-weight: 500; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.addr { white-space: normal; min-width: 220px; color: var(--muted); font-size: 13px; }
-  td.lead { white-space: normal; min-width: 170px; font-size: 13px; }
+  td.addr { min-width: 150px; color: var(--muted); font-size: 13px; }
+  td.lead { min-width: 120px; font-size: 13px; }
   button.mini {
     padding: 4px 12px; font-size: 12px; font-weight: 600;
     background: transparent; color: var(--accent);
@@ -100,7 +100,7 @@
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
       <thead><tr>
-        <th>Name</th><th>Domain</th><th style="text-align:right">Rating</th>
+        <th>Name</th><th>Domain</th>
         <th style="text-align:right">Reviews</th><th>State</th><th>Category</th><th>Address</th><th>Leadership</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -133,14 +133,16 @@ $('f').addEventListener('submit', async e => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({query, state, limit: Number($('n').value) || 20})
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
     if (!res.ok) throw new Error(data.error || 'Search failed');
 
     current = data.results;
     $('rows').innerHTML = current.map((r, i) => `<tr>
       <td class="name">${cell(r.name)}</td>
       <td>${r.domain ? `<a href="https://${esc(r.domain)}" target="_blank" rel="noopener">${esc(r.domain)}</a>` : '<span class="dash">—</span>'}</td>
-      <td class="num">${cell(r.rating)}</td>
       <td class="num">${r.ratingCount != null ? r.ratingCount.toLocaleString() : '<span class="dash">—</span>'}</td>
       <td>${cell(r.state)}</td>
       <td>${cell(r.category)}</td>
@@ -179,7 +181,10 @@ async function checkRow(i, cellEl) {
                             website: r.website, address: r.address,
                             phone: r.phone, category: r.category})
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Server error ${res.status}: ${text.slice(0, 80)}`); }
     if (!res.ok) throw new Error(data.error || 'Lookup failed');
     r.leadership = data.people
       .map(p => `${p.name} (${p.title})` + (p.source ? ` [${p.source}]` : ''))
