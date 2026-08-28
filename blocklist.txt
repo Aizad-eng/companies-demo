@@ -1,0 +1,5 @@
+# Extra blocked domains, on top of the hardcoded list in app.py
+# (manufacturers, directories, social platforms are already covered there).
+# One domain per line; "#" starts a comment. Subdomains match automatically.
+# Re-read on every search — no restart needed.
+

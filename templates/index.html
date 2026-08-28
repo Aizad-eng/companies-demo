@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maps Scraper</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #16181d; --muted: #6b7280;
+    --line: #e4e7ec; --accent: #2563eb; --accent-ink: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --ink: #e8eaed; --muted: #9aa1ad;
+      --line: #262b35; --accent: #3b82f6; --accent-ink: #fff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  form {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px; margin-bottom: 18px;
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field.grow { flex: 1 1 340px; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  input {
+    font: inherit; padding: 9px 11px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    font: inherit; font-weight: 600; padding: 9px 18px; border: 0;
+    border-radius: 7px; background: var(--accent); color: var(--accent-ink);
+    cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  .status { font-size: 13px; color: var(--muted); margin-bottom: 12px; min-height: 20px; }
+  .status.err { color: #dc2626; }
+  .tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  td.name { white-space: normal; min-width: 180px; font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.addr { white-space: normal; min-width: 220px; color: var(--muted); font-size: 13px; }
+  td.lead { white-space: normal; min-width: 170px; font-size: 13px; }
+  button.mini {
+    padding: 4px 12px; font-size: 12px; font-weight: 600;
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 6px;
+  }
+  button.mini:disabled { opacity: .55; }
+  .lead .person { display: block; }
+  .lead .title { color: var(--muted); }
+  .lead .src { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
+  .lead .src a { color: var(--muted); }
+  .lead .none { color: var(--muted); font-style: italic; }
+  .lead .err { color: #dc2626; cursor: pointer; text-decoration: underline dotted; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .dash { color: var(--muted); }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Maps Scraper</h1>
+  <p class="sub">Google Maps results via Serper &middot; max {{ page_size }} per search &middot; 3 credits per search</p>
+
+  <form id="f">
+    <div class="field grow">
+      <label for="q">Search query</label>
+      <input id="q" value="Windows and doors contractor" placeholder="e.g. Windows and doors contractor" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="st">State</label>
+      <input id="st" value="Florida" placeholder="e.g. Florida" autocomplete="off" style="width:150px">
+    </div>
+    <div class="field">
+      <label for="n">Results</label>
+      <input id="n" type="number" min="1" max="{{ page_size }}" value="{{ page_size }}" style="width:90px">
+    </div>
+    <button id="go" type="submit">Search</button>
+  </form>
+
+  <div class="bar">
+    <div class="status" id="status"></div>
+    <button class="ghost" id="csv" type="button" hidden>Download CSV</button>
+  </div>
+  <div class="tablewrap" id="tablewrap" hidden>
+    <table>
+      <thead><tr>
+        <th>Name</th><th>Domain</th><th style="text-align:right">Rating</th>
+        <th style="text-align:right">Reviews</th><th>State</th><th>Category</th><th>Address</th><th>Leadership</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let current = [];
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cell = v => (v === null || v === undefined || v === '')
+  ? '<span class="dash">—</span>' : esc(v);
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const query = $('q').value.trim();
+  const state = $('st').value.trim();
+  if (!query) return;
+  $('go').disabled = true;
+  $('status').className = 'status';
+  $('status').textContent = 'Searching…';
+  $('csv').hidden = true;
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query, state, limit: Number($('n').value) || 20})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Search failed');
+
+    current = data.results;
+    $('rows').innerHTML = current.map((r, i) => `<tr>
+      <td class="name">${cell(r.name)}</td>
+      <td>${r.domain ? `<a href="https://${esc(r.domain)}" target="_blank" rel="noopener">${esc(r.domain)}</a>` : '<span class="dash">—</span>'}</td>
+      <td class="num">${cell(r.rating)}</td>
+      <td class="num">${r.ratingCount != null ? r.ratingCount.toLocaleString() : '<span class="dash">—</span>'}</td>
+      <td>${cell(r.state)}</td>
+      <td>${cell(r.category)}</td>
+      <td class="addr">${cell(r.address)}</td>
+      <td class="lead" data-i="${i}"><button class="mini check" data-i="${i}">Check</button></td>
+    </tr>`).join('');
+
+    $('tablewrap').hidden = current.length === 0;
+    $('csv').hidden = current.length === 0;
+    const note = data.filtered
+      ? ` · ${data.filtered} filtered out`
+      : '';
+    $('status').textContent = current.length
+      ? `${current.length} result${current.length === 1 ? '' : 's'} for “${data.query}”${note} · ${data.credits} credits used`
+      : `No results for “${data.query}”${note}.`;
+    $('status').title = data.filtered
+      ? 'Blocked by blocklist.txt:\n' + data.filteredDomains.join('\n')
+      : '';
+  } catch (err) {
+    $('status').className = 'status err';
+    $('status').textContent = err.message;
+    $('tablewrap').hidden = true;
+  } finally {
+    $('go').disabled = false;
+  }
+});
+
+async function checkRow(i, cellEl) {
+  const r = current[i];
+  cellEl.innerHTML = '<span class="dash">Searching…</span>';
+  try {
+    const res = await fetch('/api/leadership', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: r.name, domain: r.domain,
+                            website: r.website, address: r.address,
+                            phone: r.phone, category: r.category})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lookup failed');
+    r.leadership = data.people
+      .map(p => `${p.name} (${p.title})` + (p.source ? ` [${p.source}]` : ''))
+      .join('; ');
+    const srcHtml = p => {
+      if (!p.source) return '';
+      const t = /^https?:\/\//.test(p.source)
+        ? `<a href="${esc(p.source)}" target="_blank" rel="noopener">${esc(p.source.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a>`
+        : esc(p.source);
+      return `<span class="src">${t}</span>`;
+    };
+    cellEl.innerHTML = data.people.length
+      ? data.people.map(p =>
+          `<span class="person">${esc(p.name)} <span class="title">· ${esc(p.title)}</span>${srcHtml(p)}</span>`
+        ).join('')
+      : '<span class="none">no one found</span>';
+    if (data.source) cellEl.title = data.source;
+  } catch (err) {
+    cellEl.innerHTML = `<span class="err" title="Click to retry">${esc(err.message)}</span>`;
+    cellEl.querySelector('.err').onclick = () => checkRow(i, cellEl);
+  }
+}
+
+$('rows').addEventListener('click', e => {
+  const btn = e.target.closest('button.check');
+  if (!btn) return;
+  btn.disabled = true;
+  checkRow(Number(btn.dataset.i), btn.closest('td'));
+});
+
+$('csv').addEventListener('click', async () => {
+  const res = await fetch('/api/export', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({results: current})
+  });
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = 'maps_results.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
