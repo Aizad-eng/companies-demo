@@ -76,6 +76,7 @@ ENV_KEYS = {
     "serper-api-token": "SERPER_API_KEY",
     "perplexity-api-token": "PERPLEXITY_API_KEY",
     "findymail-api-token": "FINDYMAIL_API_KEY",
+    "firecrawl-api-token": "FIRECRAWL_API_KEY",
 }
 
 
@@ -364,17 +365,69 @@ platform/roll-up, a national brand, or any other buyer), i.e. a change in
 its ownership. I do NOT care about companies that THIS business acquired —
 its own acquisitions of others are irrelevant and must be ignored.
 
-Search news, press releases, PE/M&A announcements (e.g. PR Newswire,
-BusinessWire), the company's own site, and industry trade press. Make sure
-any match is THIS business at THIS domain/address, not a similarly named one.
-Never guess — if there is no evidence of it being acquired, say so.
+EVIDENCE RULES — precision is critical, a wrong "acquired" ruins decisions:
+1. The source must EXPLICITLY name this business (or its exact brand/domain).
+   Anonymous broker or M&A announcements describing an unnamed business
+   ("a founder-owned window company in Florida", "a 35-year-old contractor")
+   are NOT evidence, no matter how closely the description resembles this
+   company. Inferring identity from such descriptions is forbidden.
+2. The match must be THIS business at THIS domain/address, not a similarly
+   named company elsewhere.
+3. Provide the URL of the page that names the company, and quote the exact
+   sentence that names it as acquired.
+4. If no source explicitly names this company as acquired, answer false.
+   Never guess.
+
+Search news, press releases, PE/M&A announcements (PR Newswire, BusinessWire),
+the company's own site, and industry trade press.
 
 Respond with ONLY a JSON object, no prose, in exactly this shape:
 {{"acquired": true or false,
   "acquirer": "Buyer Name or empty string",
   "when": "year or date or empty string",
   "detail": "one short sentence, empty if not acquired",
-  "source": "URL or short citation for the finding, or where you checked"}}"""
+  "quote": "the exact sentence from the source naming this company as acquired, empty if none",
+  "source": "URL of the page that names the company, or where you checked"}}"""
+
+
+def normalize_text(t):
+    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+
+def company_name_variants(name, domain):
+    """Normalized forms that count as 'the page names this company'."""
+    base = re.sub(r"\b(inc|llc|corp|co|ltd|pllc|pa|p a)\b", "", normalize_text(name)).strip()
+    variants = {normalize_text(name), base}
+    if domain:
+        variants.add(normalize_text(domain.split(".")[0]))
+    return {v for v in variants if len(v) >= 5}
+
+
+def fetch_page_text(url):
+    """Fetch a page's text for verification: Firecrawl first, plain GET fallback."""
+    try:
+        key = keychain("firecrawl-api-token")
+        r = requests.post(
+            "https://api.firecrawl.dev/v2/scrape",
+            json={"url": url, "formats": ["markdown"]},
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            timeout=60,
+        )
+        if r.ok:
+            md = (r.json().get("data") or {}).get("markdown") or ""
+            if md.strip():
+                return md
+    except (RuntimeError, requests.RequestException):
+        pass
+    try:
+        r = requests.get(url, timeout=30, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+        if r.ok:
+            return re.sub(r"<[^>]+>", " ", r.text)
+    except requests.RequestException:
+        pass
+    return ""
 
 
 def ask_perplexity(prompt):
@@ -424,12 +477,41 @@ def api_acquisition():
     except (json.JSONDecodeError, AttributeError):
         return jsonify({"error": "Could not parse model reply.",
                         "raw": reply[:300]}), 502
+    acquired = bool(parsed.get("acquired"))
+    source = (parsed.get("source") or "").strip()
+    status = "independent"
+    verification = ""
+
+    if acquired:
+        # Trust nothing: fetch the cited page ourselves and require it to
+        # explicitly name this company. Anonymous releases stay unconfirmed.
+        status = "unconfirmed"
+        m = re.search(r"https?://\S+", source)
+        if not m:
+            verification = "No source URL was provided for the claim."
+        else:
+            page = fetch_page_text(m.group(0).rstrip(").,;"))
+            if not page:
+                verification = "Could not fetch the cited source to verify."
+            else:
+                norm_page = normalize_text(page)
+                if any(v in norm_page for v in
+                       company_name_variants(name, body.get("domain") or "")):
+                    status = "acquired"
+                    verification = "Source page fetched and it names this company."
+                else:
+                    verification = ("Cited source does not name this company — "
+                                    "likely an anonymous/unrelated announcement.")
+
     return jsonify({
-        "acquired": bool(parsed.get("acquired")),
+        "status": status,
+        "acquired": status == "acquired",
         "acquirer": (parsed.get("acquirer") or "").strip(),
         "when": str(parsed.get("when") or "").strip(),
         "detail": (parsed.get("detail") or "").strip(),
-        "source": (parsed.get("source") or "").strip(),
+        "quote": (parsed.get("quote") or "").strip(),
+        "source": source,
+        "verification": verification,
     })
 
 

@@ -87,6 +87,7 @@
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
   .acq .acq-by { display: block; }
   .acq .independent { color: #16a34a; font-weight: 600; display: block; }
+  .acq .unconfirmed { color: #d97706; font-weight: 700; display: block; }
   .acq .src { display: block; font-size: 11px; color: var(--muted); }
   .acq .src a { color: var(--muted); }
   .lead .src a { color: var(--muted); }
@@ -293,11 +294,16 @@ async function checkAcquisition(i, cellEl) {
           ? `<span class="src"><a href="${esc(data.source)}" target="_blank" rel="noopener">${esc(data.source.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></span>`
           : `<span class="src">${esc(data.source)}</span>`)
       : '';
-    if (data.acquired) {
+    if (data.status === 'acquired') {
       r.acquired = `Acquired by ${data.acquirer}` + (data.when ? ` (${data.when})` : '');
       cellEl.innerHTML = `<span class="acquired">● Acquired</span>
         <span class="acq-by">${esc(data.acquirer)}${data.when ? ' · ' + esc(data.when) : ''}</span>${srcBit}`;
-      if (data.detail) cellEl.title = data.detail;
+      cellEl.title = [data.quote, data.detail, data.verification].filter(Boolean).join('\n');
+    } else if (data.status === 'unconfirmed') {
+      r.acquired = `Unconfirmed claim (${data.acquirer || 'unknown buyer'})`;
+      cellEl.innerHTML = `<span class="unconfirmed">● Unconfirmed</span>
+        <span class="acq-by">claim: ${esc(data.acquirer || '?')} — needs manual review</span>${srcBit}`;
+      cellEl.title = data.verification || '';
     } else {
       r.acquired = 'Independent';
       cellEl.innerHTML = `<span class="independent">● Independent</span>${srcBit}`;
