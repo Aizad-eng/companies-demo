@@ -85,6 +85,13 @@
   .lead .mob-slot { display: block; margin: 1px 0 2px; }
   .lead button.mob { padding: 2px 8px; font-size: 11px; }
   .lead a.found { font-weight: 600; }
+  button.copy {
+    padding: 0 5px; margin-left: 5px; font-size: 12px; line-height: 1.5;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 5px; vertical-align: 1px;
+  }
+  button.copy:hover { color: var(--accent); border-color: var(--accent); }
+  button.copy.done { color: #16a34a; border-color: #16a34a; }
   td.acq { min-width: 110px; font-size: 13px; }
   .acq .acquired { color: var(--accent); font-weight: 700; display: block; }
   .acq .acq-by { display: block; }
@@ -149,6 +156,7 @@ let current = [];
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const copyBtn = v => `<button class="copy" data-copy="${esc(v)}" title="Copy">⧉</button>`;
 const cell = v => (v === null || v === undefined || v === '')
   ? '<span class="dash">—</span>' : esc(v);
 
@@ -249,6 +257,24 @@ async function checkRow(i, cellEl) {
 }
 
 $('rows').addEventListener('click', e => {
+  const cp = e.target.closest('button.copy');
+  if (cp) {
+    const ok = () => {
+      cp.textContent = '✓';
+      cp.classList.add('done');
+      setTimeout(() => { cp.textContent = '⧉'; cp.classList.remove('done'); }, 1200);
+    };
+    navigator.clipboard.writeText(cp.dataset.copy).then(ok).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = cp.dataset.copy;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      ok();
+    });
+    return;
+  }
   const check = e.target.closest('button.check');
   if (check) {
     check.disabled = true;
@@ -343,7 +369,7 @@ async function findEmail(i, j, btn) {
       r.leadership = r._people
         .map(p => `${p.name} (${p.title})` + (p.email ? ` <${p.email}>` : '') + (p.source ? ` [${p.source}]` : ''))
         .join('; ');
-      slot.innerHTML = `<a class="found" href="mailto:${esc(data.email)}">${esc(data.email)}</a>`;
+      slot.innerHTML = `<a class="found" href="mailto:${esc(data.email)}">${esc(data.email)}</a>${copyBtn(data.email)}`;
     } else {
       slot.innerHTML = '<span class="none">no email found</span>';
     }
@@ -383,7 +409,7 @@ async function findLinkedIn(i, j, btn) {
           + (p.source ? ` [${p.source}]` : ''))
         .join('; ');
       slot.innerHTML = `<a class="found" href="${esc(data.url)}" target="_blank" rel="noopener"
-        title="${esc(data.evidence)}">in ${esc(data.url.split('/in/')[1] || 'profile')}</a>${
+        title="${esc(data.evidence)}">in ${esc(data.url.split('/in/')[1] || 'profile')}</a>${copyBtn(data.url)}${
         data.confidence === 'medium' ? ' <span class="none">(unverified)</span>' : ''}
         <span class="mob-slot"><button class="mini mob" data-i="${i}" data-j="${j}">📱 Find mobile</button></span>`;
     } else {
@@ -433,7 +459,7 @@ async function findMobile(i, j, btn) {
             + (p.linkedin ? ` ${p.linkedin}` : '')
             + (p.source ? ` [${p.source}]` : ''))
           .join('; ');
-        slot.innerHTML = `<a class="found" href="tel:${esc(pd.mobile)}">📱 ${esc(pd.mobile)}</a>`;
+        slot.innerHTML = `<a class="found" href="tel:${esc(pd.mobile)}">📱 ${esc(pd.mobile)}</a>${copyBtn(pd.mobile)}`;
         return;
       }
       if (pd.status === 'not_found') {
