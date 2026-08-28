@@ -80,12 +80,12 @@ ENV_KEYS = {
     "firecrawl-api-token": "FIRECRAWL_API_KEY",
 }
 
-# Mobile-finder pipeline: we push a person (with LinkedIn URL) to this
-# webhook (n8n -> Clay); Clay finds the mobile and writes the result into
-# Supabase, which we poll.
+# Mobile-finder pipeline: we push a person (with LinkedIn URL) straight to
+# the Clay table's webhook source; Clay finds the mobile and writes the
+# result into Supabase, which we poll.
 CLAY_WEBHOOK_URL = os.environ.get(
     "CLAY_WEBHOOK_URL",
-    "https://n8n-new-pbp2.onrender.com/webhook/21d2396f-3872-4550-ba03-383df1e56ada")
+    "https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-e7fbbcec-4f04-43a4-9bb7-58641b403d74")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 MOBILE_TABLE = "mobile_results"
