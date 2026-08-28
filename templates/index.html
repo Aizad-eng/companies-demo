@@ -75,14 +75,28 @@
     border: 1px solid var(--accent); border-radius: 6px;
   }
   button.mini:disabled { opacity: .55; }
-  .lead .person { display: block; }
+  .lead .person { display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
+  .lead .person + .person { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; }
+  .lead .pname { font-weight: 600; }
+  .lead .actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .val {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 8px; font-size: 12px;
+  }
+  .val a {
+    color: var(--ink); text-decoration: none; white-space: nowrap;
+    max-width: 185px; overflow: hidden; text-overflow: ellipsis;
+    display: inline-block;
+  }
+  .val a:hover { color: var(--accent); }
   .lead .title { color: var(--muted); }
   .lead .src { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
-  .lead .email-slot { display: block; margin: 1px 0 2px; }
+  .lead .email-slot { display: inline-flex; }
   .lead button.email { padding: 2px 8px; font-size: 11px; }
-  .lead .li-slot { display: block; margin: 1px 0 2px; }
+  .lead .li-slot { display: inline-flex; }
   .lead button.li { padding: 2px 8px; font-size: 11px; font-style: normal; }
-  .lead .mob-slot { display: block; margin: 1px 0 2px; }
+  .lead .mob-slot { display: inline-flex; }
   .lead button.mob { padding: 2px 8px; font-size: 11px; }
   .lead a.found { font-weight: 600; }
   button.copy {
@@ -104,6 +118,11 @@
   .lead .err { color: #dc2626; cursor: pointer; text-decoration: underline dotted; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
+  td > a {
+    color: var(--ink); border-bottom: 1px solid var(--line);
+  }
+  td > a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+  tbody tr:hover td { background: rgba(128, 138, 170, .05); }
   .dash { color: var(--muted); }
   .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
 </style>
@@ -242,10 +261,13 @@ async function checkRow(i, cellEl) {
     };
     cellEl.innerHTML = data.people.length
       ? data.people.map((p, j) =>
-          `<span class="person">${esc(p.name)} <span class="title">· ${esc(p.title)}</span>
-           <span class="email-slot">${r.domain ? `<button class="mini email" data-i="${i}" data-j="${j}">✉ Find email</button>` : ''}</span>
-           <span class="li-slot"><button class="mini li" data-i="${i}" data-j="${j}">in LinkedIn</button></span>
-           ${srcHtml(p)}</span>`
+          `<div class="person">
+           <span class="pname">${esc(p.name)}<span class="title"> · ${esc(p.title)}</span></span>
+           <span class="actions">
+             <span class="email-slot">${r.domain ? `<button class="mini email" data-i="${i}" data-j="${j}">✉ Email</button>` : ''}</span>
+             <span class="li-slot"><button class="mini li" data-i="${i}" data-j="${j}">in LinkedIn</button></span>
+           </span>
+           ${srcHtml(p)}</div>`
         ).join('')
       : '<span class="none">no one found</span>';
     r._people = data.people;
@@ -369,7 +391,7 @@ async function findEmail(i, j, btn) {
       r.leadership = r._people
         .map(p => `${p.name} (${p.title})` + (p.email ? ` <${p.email}>` : '') + (p.source ? ` [${p.source}]` : ''))
         .join('; ');
-      slot.innerHTML = `<a class="found" href="mailto:${esc(data.email)}">${esc(data.email)}</a>${copyBtn(data.email)}`;
+      slot.innerHTML = `<span class="val"><a href="mailto:${esc(data.email)}" title="${esc(data.email)}">✉ ${esc(data.email)}</a>${copyBtn(data.email)}</span>`;
     } else {
       slot.innerHTML = '<span class="none">no email found</span>';
     }
@@ -408,10 +430,10 @@ async function findLinkedIn(i, j, btn) {
           + (p.linkedin ? ` ${p.linkedin}` : '')
           + (p.source ? ` [${p.source}]` : ''))
         .join('; ');
-      slot.innerHTML = `<a class="found" href="${esc(data.url)}" target="_blank" rel="noopener"
-        title="${esc(data.evidence)}">in ${esc(data.url.split('/in/')[1] || 'profile')}</a>${copyBtn(data.url)}${
+      slot.innerHTML = `<span class="val"><a href="${esc(data.url)}" target="_blank" rel="noopener"
+        title="${esc(data.evidence)}">in Profile ↗</a>${copyBtn(data.url)}</span>${
         data.confidence === 'medium' ? ' <span class="none">(unverified)</span>' : ''}
-        <span class="mob-slot"><button class="mini mob" data-i="${i}" data-j="${j}">📱 Find mobile</button></span>`;
+        <span class="mob-slot"><button class="mini mob" data-i="${i}" data-j="${j}">📱 Mobile</button></span>`;
     } else {
       slot.innerHTML = '<span class="none" title="' + esc(data.evidence || '') + '">no confident match</span>';
     }
@@ -459,7 +481,7 @@ async function findMobile(i, j, btn) {
             + (p.linkedin ? ` ${p.linkedin}` : '')
             + (p.source ? ` [${p.source}]` : ''))
           .join('; ');
-        slot.innerHTML = `<a class="found" href="tel:${esc(pd.mobile)}">📱 ${esc(pd.mobile)}</a>${copyBtn(pd.mobile)}`;
+        slot.innerHTML = `<span class="val"><a href="tel:${esc(pd.mobile)}">📱 ${esc(pd.mobile)}</a>${copyBtn(pd.mobile)}</span>`;
         return;
       }
       if (pd.status === 'not_found') {
